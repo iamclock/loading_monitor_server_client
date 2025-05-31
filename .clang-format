@@ -1,0 +1,36 @@
+Language: Cpp
+BasedOnStyle: Google
+IndentWidth: 4
+UseTab: Never
+TabWidth: 4
+ColumnLimit: 80
+AccessModifierOffset: -4
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignEscapedNewlinesLeft: true
+AlignOperands: true
+AlignTrailingComments: true
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortBlocksOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterDefinitionReturnType: None
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+AlwaysBreakTemplateDeclarations: true
+MaxEmptyLinesToKeep: 1
+PointerAlignment: Left
+# BreakBeforeBraces: Stroustrup
+BreakBeforeBraces: Custom
+BraceWrapping:
+    BeforeElse: true
+# PointerAlignment: Right
+# NamespaceIndentation: All
+PenaltyBreakAssignment: 2
+PenaltyReturnTypeOnItsOwnLine: 200
+SpaceBeforeParens: Never
+DerivePointerAlignment: true
