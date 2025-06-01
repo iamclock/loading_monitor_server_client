@@ -1,6 +1,10 @@
 
 #include "server.h"
 
+#include <signal.h>
+
+volatile sig_atomic_t sigExit = 0;
+
 void LogWrite(LogBuffer *logBuffer, const char *msg) {
     sem_wait(&logBuffer->lock);
     strncpy(logBuffer->entries[logBuffer->position], msg, ENTRY_SIZE - 1);
@@ -24,16 +28,17 @@ int IsPidValid(int pid) {
 double GetCpuUsage(int pid) {
     FILE *fd, *uptimeFile;
     char path[64];
-    char pattern = "%*d %*s %*c %*d %*d %*d %*d %*u %*lu %*lu %*lu"
-                   " %*lu %*lu %lu %lu %ld %ld %*d %*d %*llu %lu";
+    const char *pattern = "%*d %*s %*c %*d %*d %*d %*d %*u %*lu %*lu %*lu"
+                          " %*lu %*lu %lu %lu %ld %ld %*d %*d %*llu %lu";
     unsigned long utime, stime, cutime, cstime, starttime;
     unsigned long totalTime, uptime;
-    double cpuPercentage = -1.0;
+    static unsigned long lastTotal = 0, lastUptime = 0;
+    double cpuPercentage = 0.0;
 
     snprintf(path, sizeof(path), "/proc/%d/stat", pid);
     fd = fopen(path, "r");
     if(!fd)
-        return cpuPercentage;
+        return -1;
     fscanf(fd, pattern, &utime, &stime, &cutime, &cstime, &starttime);
     fclose(fd);
 
@@ -44,12 +49,10 @@ double GetCpuUsage(int pid) {
     fscanf(uptimeFile, "%lu", &uptime);
     fclose(uptimeFile);
 
-    static unsigned long lastTotal = 0, lastUptime = 0;
     if(lastUptime != 0) {
         double deltaTotal = totalTime - lastTotal;
         double deltaUptime = uptime - lastUptime;
-        cpuPercentage =
-            100.0f * deltaTotal / sysconf(_SC_CLK_TCK) / deltaUptime;
+        cpuPercentage = 100.0 * deltaTotal / sysconf(_SC_CLK_TCK) / deltaUptime;
     }
     lastTotal = totalTime;
     lastUptime = uptime;
@@ -57,11 +60,41 @@ double GetCpuUsage(int pid) {
     return cpuPercentage;
 }
 
+void GetAllPids(char *output, size_t outputSize) {
+    DIR *dir = opendir("/proc");
+    int pid;
+    char path[64];
+    char pidStr[32];
+    struct dirent *entry;
+    if(!dir) {
+        snprintf(output, outputSize, "can't read /proc");
+        return;
+    }
+
+    output[0] = 0;
+
+    while((entry = readdir(dir))) {
+        if(sscanf(entry->d_name, "%d", &pid) == 1) {
+            snprintf(path, sizeof(path), "/proc/%d", pid);
+            if(access(path, F_OK) == 0) {
+                snprintf(pidStr, sizeof(pidStr), "%d\n", pid);
+                strncat(output, pidStr, outputSize - strlen(output) - 1);
+            }
+        }
+    }
+
+    closedir(dir);
+}
+
 void Worker(Server *self, int port) {
     int sockfd;
+    int pid;
     struct sockaddr_in servAddr, cliAddr;
-    socklen_t len = sizeof(cliAddr);
+    socklen_t cliLen = sizeof(cliAddr);
+    char timestamp[64];
     char buffer[1024];
+    char logEntry[256];
+    char response[256];
 
     if(0 > (sockfd = socket(AF_INET, SOCK_DGRAM, 0))) {
         perror("socket creation failed");
@@ -70,64 +103,66 @@ void Worker(Server *self, int port) {
 
     memset(&servAddr, 0, sizeof(servAddr));
     servAddr.sin_family = AF_INET;
-    servAddr.sin_addr.s_addr = INADDR_ANY;
+    servAddr.sin_addr.s_addr = inet_addr(self->ip);
     servAddr.sin_port = htons(port);
 
     if(0 > bind(sockfd, (const struct sockaddr *)&servAddr, sizeof(servAddr))) {
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
-
-    printf("Worker is listening on port %d\n", port);
-
+    printf("Worker is listening on %s:%d\n", self->ip, port);
     while(1) {
         int n = recvfrom(sockfd, buffer, (sizeof(buffer) - 1), 0,
-                         (struct sockaddr *)&cliAddr, &len);
+                         (struct sockaddr *)&cliAddr, &cliLen);
         if(n < 0)
             continue;
 
         buffer[n] = '\0';
-        char timestamp[64];
         GetTimestamp(timestamp, sizeof(timestamp));
 
-        char logEntry[256];
-        char response[256];
-
-        int pid;
         if(sscanf(buffer, "%d", &pid) == 1) {
             if(IsPidValid(pid)) {
                 float cpu = GetCpuUsage(pid);
-                if(cpu >= 0) {
+                if(cpu >= 0) {  // процесс найден -> отправка его нагрузки
                     snprintf(response, sizeof(response), "%.2f%%", cpu);
                     snprintf(logEntry, sizeof(logEntry), "%s: %d %.2f%%",
                              timestamp, pid, cpu);
                 }
-                else {
+                else {  // процесс не корректный -> ошибка
                     strcpy(response, "error");
                     snprintf(logEntry, sizeof(logEntry), "%s: %d error",
                              timestamp, pid);
                 }
             }
-            else {
+            else {  // процесс не найден -> уведомление об отсутствии
                 strcpy(response, "not found");
                 snprintf(logEntry, sizeof(logEntry), "%s: %d not found",
                          timestamp, pid);
             }
         }
         else {
-            strcpy(response, "invalid");
-            snprintf(logEntry, sizeof(logEntry), "%s: invalid request",
-                     timestamp);
+            if(strcmp(buffer, "show") != 0) {
+                // случай передачи некорректных данных
+                strcpy(response, "invalid");
+                snprintf(logEntry, sizeof(logEntry), "%s: invalid request",
+                         timestamp);
+            }
+            else {  // случай просьбы получения всех процессов
+                GetAllPids(response, sizeof(response));
+                logEntry[0] = 0;
+            }
         }
 
         sendto(sockfd, response, strlen(response), 0,
-               (const struct sockaddr *)&cliAddr, len);
+               (const struct sockaddr *)&cliAddr, cliLen);
 
-        self->LogWrite(self, logEntry);
+        if(strlen(logEntry) > 0) {
+            self->LogWrite(self->logBuffer, logEntry);
+        }
     }
 }
 
-void Cleanup(Server *self, int sig) {
+void Cleanup(Server *self) {
     LogBuffer *logBuffer = self->logBuffer;
     if(logBuffer != MAP_FAILED && logBuffer != NULL)
         munmap(logBuffer, sizeof(LogBuffer));
@@ -138,40 +173,59 @@ void Cleanup(Server *self, int sig) {
     exit(0);
 }
 
-int Run(Server *self, int *ports, int portsCount) {
-    signal(SIGINT, (void (*)(int))self->Cleanup);
-    signal(SIGTERM, (void (*)(int))self->Cleanup);
+// static void signalHandler(int sig) {
+//     static volatile sig_atomic_t sigReceived = 0;
+//     (void)sig;
+//     if(sigReceived == 0) {
+//         sigReceived = sig;
+//     }
+// }
+
+void Run(Server *self, int *ports, int portsCount) {
     int workersCount = portsCount < WORKERS_COUNT ? portsCount : WORKERS_COUNT;
+    // struct sigaction sa = {0};
+
+    // sa.sa_handler = signalHandler;
+    // sa.sa_flags = SA_RESTART;
+    // sigemptyset(&sa.sa_mask);
+    // sigaction(SIGINT, &sa, NULL);
+    // sigaction(SIGTERM, &sa, NULL);
 
     for(int i = 0; i < workersCount; ++i) {
         pid_t pid = fork();
         if(pid == 0) {
-            Worker(ports[i]);
+            Worker(self, ports[i]);
             exit(EXIT_SUCCESS);
         }
         else {
-            descendants[i] = pid;
+            self->descendants[i] = pid;
         }
     }
 
+    // while(!sigExit)
     while(1)
         pause();
 
-    Cleanup(self, 0);
+    Cleanup(self);
 }
 
-void InitServer(Server *server) {
+void InitServer(Server *server, char *ip) {
     server->shmFd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+    if(server->shmFd == -1) {
+        perror("shm_open failed");
+        exit(EXIT_FAILURE);
+    }
     ftruncate(server->shmFd, sizeof(LogBuffer));
     server->logBuffer = mmap(NULL, sizeof(LogBuffer), PROT_READ | PROT_WRITE,
                              MAP_SHARED, server->shmFd, 0);
 
     if(server->logBuffer == MAP_FAILED) {
-        perror("mmap");
+        perror("mmap failed");
         exit(EXIT_FAILURE);
     }
 
     sem_init(&server->logBuffer->lock, 1, 1);
+    server->ip = ip;
     server->logBuffer->position = 0;
 
     server->Run = Run;
