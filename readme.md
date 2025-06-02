@@ -46,3 +46,53 @@ project/
 | `"show"`    | Возвращает список всех активных PID'ов на сервере                   |
 | `"%d"`      | Возвращает %CPU процесса с указанным PID                            |
 | Невалидный  | Ответ: `"invalid"`, запись в журнал: `"DATE TIME: invalid request"` |
+---
+
+### 2. Клиент
+
+Клиент поддерживает **три режима работы**:
+
+#### Режим 1: Получение списка всех PID'ов
+
+```cpp
+void pids(Client client, const char* ip, int port) {
+    InitClient(&client, ip, port);
+    client.GetAllPids(&client);
+}
+```
+
+- Отправляет команду `"show"` на указанный порт
+- Принимает ответ и выводит список PID'ов (на данный момент только часть, на сколько хватит места в буфере)
+
+#### Режим 2: Запрос нагрузки CPU по PID
+```cpp
+void pid(Client client, const char* ip, int port, int pidn) {
+    InitClient(&client, ip, port);
+    client.GetCpuUsageByPid(&client, pidn);
+}
+```
+
+- Запрос у сервера текущей нагрузки соответствующего PID
+- Получает и выводит процент CPU или `"not found"`
+
+#### Режим 3: Фаззинг портов случайными PID
+```cpp
+void fuzzing(Client client, const char* ip, int* ports, int portsCount) {
+    if(portsCount > 1) {
+        InitClient(&client, ip, ports[0]);
+        client.FuzzServer(&client, ports, portsCount);
+    }
+}
+```
+
+- Бомбардировка сервера случайными числами в качестве pid на все указанные порты
+- Работает до завершения (`Ctrl+C` / `kill`)
+
+### Запуск
+
+Для запуска одного из режимов следует закомментировать вызовы ненужных в функции **int main()** в файле **main_client.cpp**,
+выполнить сборку `make client` и запустить полученный исполняемый файл ```bash ./client```.
+
+Для добавления отладочных символов при сборке, следует задать переменную окружения _DEBUG_: `DEBUG=1 make client`
+
+***Если требуется можно изменить опции запуска в функции main***
