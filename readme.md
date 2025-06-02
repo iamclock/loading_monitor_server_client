@@ -89,6 +89,17 @@ void fuzzing(Client client, const char* ip, int* ports, int portsCount) {
 - Работает до завершения (`Ctrl+C` / `kill`)
 
 ---
+
+### 3. Инструмент сохранения журнала
+
+```bash
+./logger_utility
+```
+
+- Сохраняет содержимое shared memory в указанный файл
+- Запускается в той же среде, где запущен сервер
+
+---
 ## Описание сборочного процесса
 
 Сборка выполняется с аргументами `-Wall -Wextra -Wstrict-prototypes -Wdeclaration-after-statement -Werror -O3 -D_DEFAULT_SOURCE
@@ -140,3 +151,14 @@ ss -plun | grep server
 ```
 
 ***Если требуется, можно изменить опции запуска в функции main***
+
+### Сохранение журнала:
+
+Указание файла для сохранения, выполняется в файле logger_utility.cpp
+
+
+```bash
+./logger_utility
+```
+
+---
