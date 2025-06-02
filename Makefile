@@ -1,9 +1,9 @@
 CC=gcc
 
 CFLAGS = -Wall -Wextra -Wstrict-prototypes \
-		 -Wdeclaration-after-statement -Werror -D_DEFAULT_SOURCE
+		 -Wdeclaration-after-statement -Werror -O3 -D_DEFAULT_SOURCE
 CFLAGSHEADERS = -Wmissing-declarations
-DBGFLAGS = -ggdb -g3 -O3
+DBGFLAGS = -ggdb -g3
 
 ifdef DEBUG
 	CFLAGS += $(DBGFLAGS)
