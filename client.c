@@ -119,12 +119,14 @@ void FuzzServer(Client* self, int* ports, int portsCount) {
     struct sockaddr_in servaddr;
     char buffer[256] = {0};
     int offset = 0;
+    char* format = "%d";
     signal(SIGINT, HandleSignal);
     signal(SIGTERM, HandleSignal);
 
     offset = sprintf(buffer, "%s", "Starting fuzzing on ports ");
     for(int i = 0; i < portsCount; ++i) {
-        offset += sprintf(buffer + offset, (i > 0 ? ", %d" : "%d"), ports[i]);
+        offset += sprintf(buffer + offset, format, ports[i]);
+        format = ", %d"
     }
     printf("%s%s", buffer, ". Press Ctrl+C to stop.\n");
 
