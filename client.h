@@ -8,8 +8,6 @@ typedef struct Client {
     void (*GetCpuUsageByPid)(struct Client* self, int pid);
     void (*FuzzServer)(struct Client* self, int* ports, int portsCount);
 
-    const char* serverIp;
-    int port;
     struct sockaddr_in serverAddr;
 } Client;
 

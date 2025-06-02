@@ -12,9 +12,6 @@
 #include <unistd.h>
 
 void InitClient(Client* client, const char* ip, int port) {
-    client->serverIp = ip;
-    client->port = port;
-
     memset(&client->serverAddr, 0, sizeof(client->serverAddr));
     client->serverAddr.sin_family = AF_INET;
     client->serverAddr.sin_port = htons(port);
@@ -81,7 +78,7 @@ int SendReceiveUdp(Client* self, const char* sendBuf, size_t sendBufSize,
 
 void GetAllPids(Client* self) {
     char sendBuf[8] = "show";
-    char recvBuf[4096];
+    char recvBuf[4096] = {0};
 
     if(SendReceiveUdp(self, sendBuf, sizeof(sendBuf), recvBuf,
                       sizeof(recvBuf)) == 0) {
@@ -93,8 +90,8 @@ void GetAllPids(Client* self) {
 }
 
 void GetCpuUsageByPid(Client* self, int pid) {
-    char sendBuf[32];
-    char recvBuf[1024];
+    char sendBuf[32] = {0};
+    char recvBuf[1024] = {0};
 
     snprintf(sendBuf, sizeof(sendBuf), "%d", pid);
 
@@ -126,7 +123,7 @@ void FuzzServer(Client* self, int* ports, int portsCount) {
     offset = sprintf(buffer, "%s", "Starting fuzzing on ports ");
     for(int i = 0; i < portsCount; ++i) {
         offset += sprintf(buffer + offset, format, ports[i]);
-        format = ", %d"
+        format = ", %d";
     }
     printf("%s%s", buffer, ". Press Ctrl+C to stop.\n");
 
